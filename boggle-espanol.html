@@ -1,0 +1,1199 @@
+sxz<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boggle en Español</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --cream: #F5F0E8;
+    --dark: #1A1410;
+    --terracotta: #C4522A;
+    --terracotta-light: #E8806A;
+    --gold: #D4A017;
+    --gold-light: #F0C040;
+    --green: #2D6A4F;
+    --green-light: #52B788;
+    --surface: #EDE8DF;
+    --surface2: #E0D9CE;
+    --text-muted: #6B5E4E;
+    --border: rgba(26,20,16,0.15);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--cream);
+    color: var(--dark);
+    min-height: 100vh;
+    background-image: 
+      radial-gradient(ellipse at 20% 80%, rgba(196,82,42,0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 20%, rgba(212,160,23,0.08) 0%, transparent 50%);
+  }
+
+  h1, h2, h3 { font-family: 'Playfair Display', serif; }
+
+  /* ---- LOBBY ---- */
+  #lobby {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+    gap: 2rem;
+  }
+
+  .logo {
+    text-align: center;
+  }
+  .logo h1 {
+    font-size: clamp(3rem, 10vw, 6rem);
+    font-weight: 900;
+    color: var(--dark);
+    letter-spacing: -2px;
+    line-height: 1;
+  }
+  .logo h1 span { color: var(--terracotta); }
+  .logo p {
+    font-size: 1rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+    font-weight: 300;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  .lobby-card {
+    background: white;
+    border-radius: 20px;
+    padding: 2.5rem;
+    width: 100%;
+    max-width: 420px;
+    border: 1px solid var(--border);
+    box-shadow: 0 8px 40px rgba(26,20,16,0.08);
+  }
+
+  .lobby-card h2 {
+    font-size: 1.4rem;
+    margin-bottom: 1.5rem;
+    color: var(--dark);
+  }
+
+  .input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .input-group label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .input-group input {
+    padding: 0.875rem 1rem;
+    border: 1.5px solid var(--border);
+    border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1rem;
+    background: var(--cream);
+    color: var(--dark);
+    transition: border-color 0.2s;
+    outline: none;
+  }
+  .input-group input:focus { border-color: var(--terracotta); }
+
+  .btn {
+    width: 100%;
+    padding: 0.9rem;
+    border: none;
+    border-radius: 10px;
+    font-family: 'DM Sans', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
+  .btn:active { transform: scale(0.98); }
+
+  .btn-primary {
+    background: var(--terracotta);
+    color: white;
+  }
+  .btn-primary:hover { background: #B3481F; }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--terracotta);
+    border: 1.5px solid var(--terracotta);
+    margin-top: 0.75rem;
+  }
+  .btn-secondary:hover { background: rgba(196,82,42,0.06); }
+
+  .btn-gold {
+    background: var(--gold);
+    color: white;
+  }
+  .btn-gold:hover { background: #B88A0F; }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 1.5rem 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+  .divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  /* ---- WAITING ROOM ---- */
+  #waiting {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+    gap: 1.5rem;
+  }
+
+  .room-code-display {
+    text-align: center;
+  }
+  .room-code-display p {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+  }
+  .room-code-display .code {
+    font-family: 'Playfair Display', serif;
+    font-size: 3.5rem;
+    font-weight: 900;
+    color: var(--terracotta);
+    letter-spacing: 8px;
+  }
+
+  .players-list {
+    background: white;
+    border-radius: 16px;
+    padding: 1.5rem;
+    width: 100%;
+    max-width: 380px;
+    border: 1px solid var(--border);
+  }
+  .players-list h3 {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    color: var(--text-muted);
+    font-family: 'DM Sans', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 0.8rem;
+  }
+
+  .player-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .player-item:last-child { border-bottom: none; }
+
+  .player-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  .status-badge {
+    margin-left: auto;
+    font-size: 0.7rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 100px;
+    font-weight: 500;
+  }
+  .status-host {
+    background: rgba(196,82,42,0.12);
+    color: var(--terracotta);
+  }
+  .status-ready {
+    background: rgba(45,106,79,0.12);
+    color: var(--green);
+  }
+
+  /* ---- GAME ---- */
+  #game {
+    display: none;
+    flex-direction: column;
+    min-height: 100vh;
+    padding: 1rem;
+    gap: 1rem;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  .game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    border-radius: 14px;
+    padding: 0.75rem 1.25rem;
+    border: 1px solid var(--border);
+  }
+
+  .timer-display {
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem;
+    font-weight: 900;
+    color: var(--dark);
+    min-width: 60px;
+    text-align: center;
+    transition: color 0.3s;
+  }
+  .timer-display.urgent { color: var(--terracotta); animation: pulse 0.5s ease-in-out infinite alternate; }
+  @keyframes pulse { from { opacity: 1; } to { opacity: 0.5; } }
+
+  .round-info {
+    text-align: center;
+  }
+  .round-info .round-num {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+  }
+
+  .scores-mini {
+    display: flex;
+    gap: 1rem;
+  }
+  .score-chip {
+    text-align: right;
+  }
+  .score-chip .name {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .score-chip .pts {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--dark);
+  }
+
+  /* Board */
+  .board-wrap {
+    display: flex;
+    justify-content: center;
+  }
+
+  .board {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+    background: var(--surface2);
+    border-radius: 18px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    touch-action: none;
+    user-select: none;
+    width: 100%;
+    max-width: 360px;
+    aspect-ratio: 1;
+  }
+
+  .tile {
+    background: white;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: all 0.15s;
+    position: relative;
+    aspect-ratio: 1;
+  }
+
+  .tile .letter {
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.2rem, 4vw, 1.8rem);
+    font-weight: 900;
+    color: var(--dark);
+    line-height: 1;
+  }
+
+  .tile .points {
+    font-size: 0.55rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    position: absolute;
+    bottom: 4px;
+    right: 6px;
+  }
+
+  .tile.selected {
+    background: var(--terracotta);
+    border-color: #B3481F;
+    transform: scale(0.95);
+  }
+  .tile.selected .letter { color: white; }
+  .tile.selected .points { color: rgba(255,255,255,0.7); }
+
+  .tile.path {
+    background: var(--surface);
+    border-color: var(--terracotta-light);
+  }
+
+  /* Word input area */
+  .word-area {
+    background: white;
+    border-radius: 14px;
+    padding: 1rem 1.25rem;
+    border: 1px solid var(--border);
+  }
+
+  .current-word {
+    font-family: 'Playfair Display', serif;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--dark);
+    min-height: 2.5rem;
+    text-align: center;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+
+  .word-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+  }
+  .word-actions .btn { width: auto; flex: 1; font-size: 0.9rem; padding: 0.7rem; }
+
+  .found-words {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+    max-height: 100px;
+    overflow-y: auto;
+  }
+
+  .word-tag {
+    background: var(--surface);
+    border-radius: 100px;
+    padding: 0.25rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--dark);
+    border: 1px solid var(--border);
+  }
+  .word-tag.valid { background: rgba(45,106,79,0.1); border-color: var(--green-light); color: var(--green); }
+  .word-tag.invalid { background: rgba(196,82,42,0.1); border-color: var(--terracotta-light); color: var(--terracotta); text-decoration: line-through; }
+
+  .word-feedback {
+    text-align: center;
+    font-size: 0.85rem;
+    margin-top: 0.4rem;
+    min-height: 1.2rem;
+    font-weight: 500;
+  }
+  .word-feedback.ok { color: var(--green); }
+  .word-feedback.err { color: var(--terracotta); }
+
+  /* ---- RESULTS ---- */
+  #results {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 2rem;
+    gap: 1.5rem;
+  }
+
+  .results-title {
+    text-align: center;
+  }
+  .results-title h2 {
+    font-size: 2.5rem;
+    color: var(--dark);
+  }
+  .results-title .winner-name {
+    color: var(--terracotta);
+  }
+
+  .results-card {
+    background: white;
+    border-radius: 20px;
+    padding: 2rem;
+    width: 100%;
+    max-width: 460px;
+    border: 1px solid var(--border);
+  }
+
+  .player-result {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .player-result:last-child { border-bottom: none; }
+
+  .result-rank {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.5rem;
+    font-weight: 900;
+    color: var(--text-muted);
+    min-width: 30px;
+  }
+  .result-rank.first { color: var(--gold); }
+
+  .result-details { flex: 1; }
+  .result-details .pname {
+    font-weight: 600;
+    font-size: 1rem;
+  }
+  .result-details .words {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.4rem;
+  }
+  .result-details .words span {
+    font-size: 0.75rem;
+    background: var(--surface);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    color: var(--text-muted);
+  }
+  .result-score {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.8rem;
+    font-weight: 900;
+    color: var(--dark);
+  }
+
+  .hidden { display: none !important; }
+
+  .toast {
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--dark);
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 100px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--cream);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    z-index: 500;
+    transition: opacity 0.5s;
+  }
+  .loading-overlay h2 { font-size: 1.5rem; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--terracotta);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div id="toast" class="toast"></div>
+
+<!-- LOBBY -->
+<div id="lobby">
+  <div class="logo">
+    <h1>Bo<span>ggle</span></h1>
+    <p>Juego de palabras en español</p>
+  </div>
+
+  <div class="lobby-card">
+    <h2>Crear nueva sala</h2>
+    <div class="input-group">
+      <label>Tu nombre</label>
+      <input id="create-name" type="text" placeholder="¿Cómo te llamas?" maxlength="20">
+    </div>
+    <button class="btn btn-primary" onclick="createRoom()">Crear sala →</button>
+
+    <div class="divider">o únete a una sala existente</div>
+
+    <div class="input-group">
+      <label>Tu nombre</label>
+      <input id="join-name" type="text" placeholder="¿Cómo te llamas?" maxlength="20">
+      <label>Código de sala</label>
+      <input id="join-code" type="text" placeholder="ABCD" maxlength="4" style="text-transform:uppercase; font-size:1.3rem; letter-spacing:4px; text-align:center;">
+    </div>
+    <button class="btn btn-secondary" onclick="joinRoom()">Unirse a sala</button>
+  </div>
+</div>
+
+<!-- WAITING ROOM -->
+<div id="waiting">
+  <div class="room-code-display">
+    <p>Código de sala</p>
+    <div class="code" id="room-code-show">----</div>
+    <p style="font-size:0.8rem; color: var(--text-muted); margin-top:0.5rem;">Comparte este código con tus amigos</p>
+  </div>
+
+  <div class="players-list">
+    <h3>Jugadores en la sala</h3>
+    <div id="waiting-players"></div>
+  </div>
+
+  <button class="btn btn-primary" id="start-btn" onclick="startGame()" style="max-width:380px; display:none;">
+    Comenzar juego ▶
+  </button>
+  <p id="waiting-msg" style="color: var(--text-muted); font-size:0.9rem;">Esperando al anfitrión para comenzar...</p>
+</div>
+
+<!-- GAME -->
+<div id="game">
+  <div class="game-header">
+    <div class="timer-display" id="timer">3:00</div>
+    <div class="round-info">
+      <div class="round-num">En juego</div>
+    </div>
+    <div class="scores-mini" id="scores-mini"></div>
+  </div>
+
+  <div class="board-wrap">
+    <div class="board" id="board"></div>
+  </div>
+
+  <div class="word-area">
+    <div class="current-word" id="current-word">—</div>
+    <div class="word-feedback" id="word-feedback"></div>
+    <div class="word-actions">
+      <button class="btn btn-primary" onclick="submitWord()">Enviar</button>
+      <button class="btn btn-secondary" onclick="clearWord()">Limpiar</button>
+    </div>
+    <div class="found-words" id="found-words"></div>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div id="results">
+  <div class="results-title">
+    <p style="font-size:0.8rem; text-transform:uppercase; letter-spacing:2px; color: var(--text-muted);">Fin del juego</p>
+    <h2 id="results-headline">¡Ganador!</h2>
+  </div>
+  <div class="results-card">
+    <div id="results-list"></div>
+  </div>
+  <button class="btn btn-primary" onclick="backToLobby()" style="max-width:380px;">Jugar de nuevo</button>
+</div>
+
+<script>
+// ========================
+// FIREBASE CONFIG
+// Replace with your own Firebase project config
+// Free plan (Spark) is sufficient for this game
+// ========================
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCASKZJOO8DGMLS12UJG93NL332665IK20",
+  authDomain: "boggle-b03a2.firebaseapp.com",
+  databaseURL: "https://boggle-b03a2-default-rtdb.firebaseio.com",
+  projectId: "boggle-b03a2",
+  storageBucket: "boggle-b03a2.firebasestorage.app",
+  messagingSenderId: "57814814498",
+  appId: "1:57814814498:web:6d118bc547bd80f4941f7b"
+};
+
+// ========================
+// SPANISH BOGGLE LETTERS (frequency-weighted for Spanish)
+// ========================
+const DICE = [
+  ['A','A','E','I','O','T'],
+  ['A','B','L','N','O','R'],
+  ['A','C','D','E','L','M'],
+  ['A','E','E','G','N','S'],
+  ['A','E','I','O','U','N'],
+  ['A','E','R','T','U','V'],
+  ['B','D','E','H','L','O'],
+  ['C','E','I','L','N','R'],
+  ['C','H','O','P','Q','U'],
+  ['D','E','E','R','S','T'],
+  ['E','I','L','O','R','U'],
+  ['E','M','N','R','S','T'],
+  ['E','P','R','S','T','U'],
+  ['F','G','J','O','R','V'],
+  ['G','I','L','N','O','S'],
+  ['H','I','N','P','Q','U'],
+];
+
+const LETTER_POINTS = {
+  A:1, E:1, I:1, O:1, S:1, R:1, N:1, L:1, U:1, T:1,
+  D:2, G:2,
+  B:3, C:3, M:3, P:3,
+  F:4, H:4, V:4, Y:4,
+  CH:5, LL:5, J:6, X:8, K:10, Q:10, Z:10
+};
+
+// ========================
+// SPANISH WORD DICTIONARY (common 3+ letter words)
+// This is a curated list; for production use a full diccionario API
+// ========================
+const DICT = new Set([
+  // 3 letters
+  'sal','sol','mar','pan','pie','rio','luz','cal','mal','par','red','ser','ten','uno','ver','vez',
+  'asi','aun','con','del','den','dos','esa','ese','eso','fue','hay','las','les','los','mas',
+  'nos','por','que','sin','son','sus','tan','una','van','voz','yen','era','ira','lea','leo',
+  'lie','mia','mio','nos','ola','osa','pie','reo','rea','ren','res','reo','seo','tal','tad',
+  'ave','amo','ama','ami','aro','arco','asa','ase','asi','bai','ben','boa','bol','bot','bea',
+  'can','cap','car','cas','cae','cae','cen','cer','col','cor','cos','cot','coz','cul',
+  'dan','dar','den','dia','don','dos','eco','eje','ela','eme','ena','end','ene','ere','eri',
+  'gel','gen','gor','got','gre','gua','haz','hez','hip','hoy','ico','ido','ida','ide','ier',
+  'ins','ion','ira','ire','iso','ita','ito','iza','izo','jan','lea','leg','let','loa','loe',
+  'los','lua','lue','lug','mao','mec','med','mes','met','mir','mis','moc','mol','mon','mor',
+  'nao','nea','neo','net','nor','ola','ole','oli','ora','ore','ori','oro','oto','pag','pal',
+  'pea','pes','pez','pic','plo','pod','pol','pom','pro','pub','pun','pur','ram','reo','rep',
+  'rol','rom','ron','rot','rub','ruc','rue','rum','run','rut','sac','san','sap','set','sim',
+  'sir','sis','sob','sor','sub','sur','sus','tac','tam','tan','tao','tar','tas','tau','tec',
+  'tem','ter','tes','tin','tio','tis','tom','ton','top','tor','tos','tri','tul','tun','tur',
+  'uno','upa','urd','uro','usa','uso','uta','uva','vac','val','var','vea','vel','ven','ver',
+  'via','vie','vil','vin','vis','vol','zon',
+  // 4 letters
+  'abre','acto','agua','aire','alma','alto','amor','anos','ante','arco','area','arma','arte',
+  'asco','aula','auto','aves','ayer','azul','bala','boca','boda','bote','cabo','caja','cala',
+  'cama','cana','cara','casa','caso','cena','cero','cine','club','cola','come','como','copa',
+  'cora','coro','cosa','crea','cual','dama','dato','dedo','dela','deme','dena','dere','desi',
+  'dios','duda','duro','echo','edad','este','euro','fama','fila','fino','flor','foco','fono',
+  'foto','frio','gana','gato','giro','gota','gris','hola','hora','huno','idea','isla','jefe',
+  'jugo','juez','lago','lana','lane','lado','leal','leña','leve','liso','lima','liso','lista',
+  'lobo','loco','luna','mano','mapa','mare','masa','mayo','mesa','meta','modo','moto','mudo',
+  'musa','nazo','nena','neve','niño','nota','nube','obra','ocho','olla','onda','once','oral',
+  'orbe','orca','otro','ovni','pace','paco','paga','palo','pana','papa','pata','pelo','pena',
+  'pera','pero','pesa','peso','pica','pile','pino','piso','pita','plan','poca','poco','polo',
+  'poma','pone','pone','popa','poro','porte','pose','puma','rabo','rama','rana','rapa','raro',
+  'rasa','rata','rato','raza','real','reja','rena','roca','roja','rojo','ropa','rosa','roto',
+  'ruta','sala','sale','sana','seda','seno','sera','seta','sida','sola','soma','sopa','sosa',
+  'taco','tapa','tasa','tema','toro','tuca','tuna','tupe','turd','turno','unas','urea','urna',
+  'usar','vaca','vale','vela','vena','vena','veta','vida','vino','vira','visa','viso','viva',
+  'vive','vivo','voto','zona',
+  // 5+ letters
+  'abrir','abril','abeja','acero','actos','adios','aguja','ahora','ajeno','album','algas',
+  'alien','almas','altos','aluna','amigo','amiga','angel','antes','arbol','armas','artes',
+  'asado','atlas','avion','azote','azucar','beber','bella','bello','blanco','blusa','bolsa',
+  'bonos','bordo','bravo','breve','bueno','buena','burro','cabal','cabra','cacao','caida',
+  'calma','calor','calle','campo','canas','canto','capaz','carpe','carta','casco','causa',
+  'cazar','cerca','cerro','cielo','cinco','cinto','circo','clase','claro','cobra','cocer',
+  'coche','coger','color','combo','comer','corte','costa','crazy','crema','crise','cuero',
+  'cueva','curso','danza','datos','debut','decir','delta','demos','denso','desco','deseo',
+  'deuda','disco','dosis','dulce','edema','enero','entre','equip','error','escena','esfera',
+  'estre','falta','fango','favor','feliz','feria','ferro','festa','ficha','finca','firma',
+  'flaco','fleco','fondo','forma','forte','freno','fuego','fuera','fuerza','ganas','gatow',
+  'gente','globo','golfo','gordo','gorra','gramo','grasa','grave','grupo','gusto','habla',
+  'hambre','hielo','hillo','hipno','hogar','horca','hosco','hueso','humano','ideas','idiom',
+  'igual','imagen','impar','indio','insto','inter','james','jardn','jarra','jinete','josue',
+  'juego','junio','junto','justo','laser','leche','legal','lejano','letra','libro','limon',
+  'linea','litro','llena','lleno','lleva','lloro','lluvia','logro','lucha','lugar','madre',
+  'magno','mambo','manos','marca','mario','marzo','mayor','media','medio','mejor','menor',
+  'mente','metro','miedo','mirar','mismo','mitad','mixto','mojon','mundo','museo','musica',
+  'nadie','negro','nivel','noble','norte','novia','novio','nuevo','nueva','numer','obrar',
+  'obras','ocean','ojera','optar','orden','osado','padre','pagar','pared','parte','pasta',
+  'patria','pavon','pelea','perro','piano','pinza','pinta','piton','pizza','plaza','playa',
+  'pluma','poder','poema','polvo','primo','prima','plaza','prueba','puedo','punto','radio',
+  'razon','recio','reino','reloj','resta','rindo','rival','robin','rubio','rubia','ruido',
+  'rumbo','saber','sabor','sacar','sagaz','salon','salto','salud','salvo','sangr','saque',
+  'selva','senal','señor','señora','serie','sexto','silbo','solar','solaz','sueño','suelo',
+  'sumo','super','tabla','tanto','tarde','techo','telos','tema','tiempo','tigre','timbre',
+  'tomar','tomar','torno','toros','total','traje','trama','trozo','tumor','union','usual',
+  'valer','valor','vanos','vapor','velar','vence','verde','verso','viaje','vigor','viral',
+  'virus','vista','vocal','vuelo','zorro','zurdo',
+  // common verbs forms
+  'ser','estar','tener','hacer','poder','querer','decir','saber','llegar','pasar','deber',
+  'poner','ver','dar','tomar','conocer','vivir','sentir','hablar','llevar','dejar','seguir',
+  'encontrar','llamar','venir','pensar','salir','volver','creer','buscar','quedar','trabajar',
+  'perder','ganar','esperar','crear','leer','abrir','correr','caer','morir','nacer','dormir',
+  'comer','beber','escribir','limpiar','comprar','vender','jugar','cantar','bailar','cocinar',
+]);
+
+// ========================
+// GAME STATE
+// ========================
+let db, roomRef, playerId, playerName, roomCode, isHost;
+let board = [], selectedCells = [], foundWords = [], scores = {};
+let timerInterval, gameActive = false;
+
+const COLORS = ['#C4522A','#2D6A4F','#1A5276','#7D3C98','#B7950B','#943126'];
+
+// ========================
+// FIREBASE SETUP
+// ========================
+function initFirebase() {
+  try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+    return true;
+  } catch(e) {
+    // Demo mode if Firebase not configured
+    console.warn('Firebase not configured, running in demo mode');
+    return false;
+  }
+}
+
+// ========================
+// ROOM MANAGEMENT
+// ========================
+function genCode() {
+  return Math.random().toString(36).substring(2,6).toUpperCase().replace(/[0O1I]/g,'X');
+}
+
+function genPlayerId() {
+  return 'p_' + Math.random().toString(36).substring(2,10);
+}
+
+async function createRoom() {
+  const name = document.getElementById('create-name').value.trim();
+  if (!name) { showToast('Escribe tu nombre'); return; }
+  
+  playerName = name;
+  playerId = genPlayerId();
+  isHost = true;
+  roomCode = genCode();
+
+  if (!db) { startDemoMode(); return; }
+
+  roomRef = db.ref('rooms/' + roomCode);
+  await roomRef.set({
+    host: playerId,
+    status: 'waiting',
+    players: { [playerId]: { name, score: 0, words: [] } },
+    board: null,
+    startedAt: null
+  });
+
+  showWaiting();
+  listenRoom();
+}
+
+async function joinRoom() {
+  const name = document.getElementById('join-name').value.trim();
+  const code = document.getElementById('join-code').value.trim().toUpperCase();
+  if (!name) { showToast('Escribe tu nombre'); return; }
+  if (!code || code.length < 4) { showToast('Ingresa el código de sala'); return; }
+
+  if (!db) { showToast('Firebase no configurado. Usa el modo demo.'); return; }
+
+  playerName = name;
+  playerId = genPlayerId();
+  isHost = false;
+  roomCode = code;
+  roomRef = db.ref('rooms/' + code);
+
+  const snap = await roomRef.once('value');
+  if (!snap.exists()) { showToast('Sala no encontrada'); return; }
+  
+  const data = snap.val();
+  if (data.status !== 'waiting') { showToast('El juego ya comenzó'); return; }
+
+  await roomRef.child('players/' + playerId).set({ name, score: 0, words: [] });
+
+  showWaiting();
+  listenRoom();
+}
+
+function listenRoom() {
+  roomRef.on('value', snap => {
+    if (!snap.exists()) return;
+    const data = snap.val();
+    const players = data.players || {};
+
+    updateWaitingPlayers(players, data.host);
+
+    if (data.status === 'playing' && !gameActive) {
+      board = data.board;
+      scores = {};
+      Object.entries(players).forEach(([id, p]) => scores[id] = { name: p.name, score: 0 });
+      startGameLocal();
+    }
+
+    if (data.status === 'finished') {
+      showResults(data);
+    }
+
+    if (gameActive && data.players) {
+      updateScoresMini(data.players);
+    }
+  });
+}
+
+// ========================
+// WAITING ROOM UI
+// ========================
+function showWaiting() {
+  document.getElementById('lobby').style.display = 'none';
+  document.getElementById('waiting').style.display = 'flex';
+  document.getElementById('room-code-show').textContent = roomCode;
+  if (isHost) {
+    document.getElementById('start-btn').style.display = 'block';
+    document.getElementById('waiting-msg').style.display = 'none';
+  }
+}
+
+function updateWaitingPlayers(players, hostId) {
+  const el = document.getElementById('waiting-players');
+  el.innerHTML = '';
+  Object.entries(players).forEach(([id, p], i) => {
+    const isThisHost = id === hostId;
+    el.innerHTML += `
+      <div class="player-item">
+        <div class="player-avatar" style="background:${COLORS[i % COLORS.length]}">${p.name[0].toUpperCase()}</div>
+        <span style="font-weight:500">${p.name}</span>
+        <span class="status-badge ${isThisHost ? 'status-host' : 'status-ready'}">${isThisHost ? 'Anfitrión' : 'Listo'}</span>
+      </div>`;
+  });
+}
+
+// ========================
+// BOARD GENERATION
+// ========================
+function generateBoard() {
+  const shuffled = [...DICE].sort(() => Math.random() - 0.5);
+  return shuffled.map(die => die[Math.floor(Math.random() * die.length)]);
+}
+
+async function startGame() {
+  if (!isHost) return;
+  const newBoard = generateBoard();
+  await roomRef.update({ board: newBoard, status: 'playing', startedAt: Date.now() });
+}
+
+// ========================
+// GAME LOCAL STATE
+// ========================
+function startGameLocal() {
+  gameActive = true;
+  foundWords = [];
+  selectedCells = [];
+
+  document.getElementById('waiting').style.display = 'none';
+  document.getElementById('game').style.display = 'flex';
+
+  renderBoard();
+  startTimer(180); // 3 minutes
+}
+
+function renderBoard() {
+  const boardEl = document.getElementById('board');
+  boardEl.innerHTML = '';
+  board.forEach((letter, i) => {
+    const tile = document.createElement('div');
+    tile.className = 'tile';
+    tile.dataset.idx = i;
+    tile.innerHTML = `<span class="letter">${letter}</span><span class="points">${LETTER_POINTS[letter] || 1}</span>`;
+    tile.addEventListener('click', () => selectTile(i));
+    tile.addEventListener('touchstart', (e) => { e.preventDefault(); selectTile(i); }, {passive:false});
+    boardEl.appendChild(tile);
+  });
+}
+
+function selectTile(idx) {
+  if (!gameActive) return;
+
+  // Deselect if clicking last selected
+  if (selectedCells.length > 0 && selectedCells[selectedCells.length - 1] === idx) {
+    selectedCells.pop();
+    updateTileStyles();
+    updateCurrentWord();
+    return;
+  }
+
+  // Check adjacency
+  if (selectedCells.length > 0) {
+    if (!isAdjacent(selectedCells[selectedCells.length - 1], idx)) return;
+  }
+
+  // Prevent reuse
+  if (selectedCells.includes(idx)) return;
+
+  selectedCells.push(idx);
+  updateTileStyles();
+  updateCurrentWord();
+}
+
+function isAdjacent(a, b) {
+  const ar = Math.floor(a / 4), ac = a % 4;
+  const br = Math.floor(b / 4), bc = b % 4;
+  return Math.abs(ar - br) <= 1 && Math.abs(ac - bc) <= 1;
+}
+
+function updateTileStyles() {
+  document.querySelectorAll('.tile').forEach((t, i) => {
+    t.classList.remove('selected', 'path');
+    if (selectedCells.includes(i)) {
+      if (i === selectedCells[selectedCells.length - 1]) t.classList.add('selected');
+      else t.classList.add('path');
+    }
+  });
+}
+
+function updateCurrentWord() {
+  const word = selectedCells.map(i => board[i]).join('');
+  document.getElementById('current-word').textContent = word || '—';
+  document.getElementById('word-feedback').textContent = '';
+}
+
+function clearWord() {
+  selectedCells = [];
+  updateTileStyles();
+  updateCurrentWord();
+}
+
+function submitWord() {
+  const word = selectedCells.map(i => board[i]).join('').toLowerCase();
+  const fb = document.getElementById('word-feedback');
+
+  if (word.length < 3) { fb.textContent = 'Mínimo 3 letras'; fb.className = 'word-feedback err'; return; }
+  if (foundWords.includes(word)) { fb.textContent = 'Ya encontraste esa palabra'; fb.className = 'word-feedback err'; clearWord(); return; }
+
+  if (DICT.has(word)) {
+    const pts = calcPoints(word);
+    foundWords.push(word);
+    addWordTag(word, true);
+    fb.textContent = `✓ +${pts} puntos`;
+    fb.className = 'word-feedback ok';
+    saveWordToFirebase(word, pts);
+  } else {
+    addWordTag(word, false);
+    fb.textContent = '✗ Palabra no válida';
+    fb.className = 'word-feedback err';
+  }
+  clearWord();
+}
+
+function calcPoints(word) {
+  const len = word.length;
+  if (len === 3) return 1;
+  if (len === 4) return 1;
+  if (len === 5) return 2;
+  if (len === 6) return 3;
+  if (len === 7) return 5;
+  return 11;
+}
+
+function addWordTag(word, valid) {
+  const tag = document.createElement('span');
+  tag.className = `word-tag ${valid ? 'valid' : 'invalid'}`;
+  tag.textContent = word;
+  document.getElementById('found-words').prepend(tag);
+}
+
+async function saveWordToFirebase(word, pts) {
+  if (!roomRef || !playerId) return;
+  const playerRef = roomRef.child('players/' + playerId);
+  const snap = await playerRef.once('value');
+  const current = snap.val();
+  const newScore = (current.score || 0) + pts;
+  const newWords = [...(current.words || []), word];
+  await playerRef.update({ score: newScore, words: newWords });
+}
+
+// ========================
+// TIMER
+// ========================
+function startTimer(seconds) {
+  let remaining = seconds;
+  const timerEl = document.getElementById('timer');
+
+  function tick() {
+    const m = Math.floor(remaining / 60);
+    const s = remaining % 60;
+    timerEl.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+    if (remaining <= 30) timerEl.classList.add('urgent');
+    else timerEl.classList.remove('urgent');
+
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      endGame();
+    } else {
+      remaining--;
+    }
+  }
+
+  tick();
+  timerInterval = setInterval(tick, 1000);
+}
+
+async function endGame() {
+  gameActive = false;
+  if (isHost && roomRef) {
+    await roomRef.update({ status: 'finished' });
+  } else if (!roomRef) {
+    // Demo mode
+    showResultsDemo();
+  }
+}
+
+// ========================
+// SCORES
+// ========================
+function updateScoresMini(players) {
+  const el = document.getElementById('scores-mini');
+  el.innerHTML = '';
+  Object.entries(players).slice(0, 3).forEach(([id, p], i) => {
+    el.innerHTML += `
+      <div class="score-chip">
+        <div class="name">${p.name}</div>
+        <div class="pts" style="color:${COLORS[i]}">${p.score || 0}</div>
+      </div>`;
+  });
+}
+
+// ========================
+// RESULTS
+// ========================
+function showResults(data) {
+  document.getElementById('game').style.display = 'none';
+  document.getElementById('results').style.display = 'flex';
+  clearInterval(timerInterval);
+  gameActive = false;
+
+  const players = data.players || {};
+  const sorted = Object.entries(players).sort((a, b) => (b[1].score || 0) - (a[1].score || 0));
+
+  if (sorted.length > 0) {
+    document.getElementById('results-headline').innerHTML = 
+      `¡<span class="winner-name">${sorted[0][1].name}</span> gana!`;
+  }
+
+  const list = document.getElementById('results-list');
+  list.innerHTML = '';
+  sorted.forEach(([id, p], i) => {
+    const words = (p.words || []).join(', ') || '—';
+    list.innerHTML += `
+      <div class="player-result">
+        <div class="result-rank ${i === 0 ? 'first' : ''}">${i + 1}</div>
+        <div class="result-details">
+          <div class="pname">${p.name}</div>
+          <div class="words"><span>${words}</span></div>
+        </div>
+        <div class="result-score" style="color:${COLORS[i]}">${p.score || 0}</div>
+      </div>`;
+  });
+}
+
+function showResultsDemo() {
+  const demoData = {
+    players: {
+      [playerId]: { name: playerName, score: foundWords.reduce((acc, w) => acc + calcPoints(w), 0), words: foundWords }
+    }
+  };
+  showResults(demoData);
+}
+
+function backToLobby() {
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('lobby').style.display = 'flex';
+  gameActive = false;
+  foundWords = [];
+  selectedCells = [];
+  if (roomRef) roomRef.off();
+}
+
+// ========================
+// DEMO MODE (no Firebase)
+// ========================
+function startDemoMode() {
+  playerName = document.getElementById('create-name').value.trim() || 'Jugador';
+  playerId = genPlayerId();
+  isHost = true;
+  roomCode = 'DEMO';
+  isHost = true;
+  board = generateBoard();
+  document.getElementById('lobby').style.display = 'none';
+  startGameLocal();
+  showToast('Modo demo (1 jugador)');
+}
+
+// ========================
+// HELPERS
+// ========================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ========================
+// KEYBOARD SUPPORT
+// ========================
+document.addEventListener('keydown', e => {
+  if (!gameActive) return;
+  if (e.key === 'Enter') submitWord();
+  if (e.key === 'Escape') clearWord();
+});
+
+// ========================
+// INIT
+// ========================
+initFirebase();
+
+// Check if running without config - offer demo
+if (FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') {
+  document.querySelector('.btn-primary').textContent = 'Demo (1 jugador) →';
+  document.querySelector('.btn-primary').onclick = startDemoMode;
+  document.querySelector('.btn-secondary').onclick = () => showToast('Configura Firebase para jugar con amigos');
+  
+  const note = document.createElement('p');
+  note.style.cssText = 'font-size:0.78rem; color: var(--text-muted); text-align:center; max-width:380px; line-height:1.5; margin-top:-1rem;';
+  note.textContent = 'Para multijugador, configura Firebase (instrucciones en el código)';
+  document.getElementById('lobby').appendChild(note);
+}
+</script>
+</body>
+</html>
