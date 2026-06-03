@@ -346,19 +346,14 @@
 
   .tile .letter {
     font-family: 'Playfair Display', serif;
-    font-size: clamp(1.2rem, 4vw, 1.8rem);
+    font-size: clamp(1.6rem, 5.5vw, 2.4rem);
     font-weight: 900;
     color: var(--dark);
     line-height: 1;
   }
 
   .tile .points {
-    font-size: 0.55rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    position: absolute;
-    bottom: 4px;
-    right: 6px;
+    display: none;
   }
 
   .tile.selected {
@@ -367,7 +362,6 @@
     transform: scale(0.95);
   }
   .tile.selected .letter { color: white; }
-  .tile.selected .points { color: rgba(255,255,255,0.7); }
 
   .tile.path {
     background: var(--surface);
@@ -1050,31 +1044,105 @@ function renderBoard() {
     tile.className = 'tile';
     tile.dataset.idx = i;
     tile.innerHTML = `<span class="letter">${letter}</span><span class="points">${LETTER_POINTS[letter] || 1}</span>`;
-    tile.addEventListener('click', () => selectTile(i));
-    tile.addEventListener('touchstart', (e) => { e.preventDefault(); selectTile(i); }, {passive:false});
     boardEl.appendChild(tile);
   });
+
+  // Attach drag/touch/mouse events to the board container
+  boardEl.addEventListener('mousedown',  onDragStart, {passive: false});
+  boardEl.addEventListener('touchstart', onDragStart, {passive: false});
+  boardEl.addEventListener('mousemove',  onDragMove,  {passive: false});
+  boardEl.addEventListener('touchmove',  onDragMove,  {passive: false});
+  boardEl.addEventListener('mouseup',    onDragEnd,   {passive: false});
+  boardEl.addEventListener('touchend',   onDragEnd,   {passive: false});
+  boardEl.addEventListener('mouseleave', onDragEnd,   {passive: false});
+}
+
+let isDragging = false;
+let dragMoved = false;      // true if finger/mouse moved enough to count as a drag
+let dragStartIdx = null;    // tile touched at start
+
+function getTileFromPoint(x, y) {
+  const el = document.elementFromPoint(x, y);
+  if (!el) return null;
+  const tile = el.closest('.tile');
+  if (!tile) return null;
+  return parseInt(tile.dataset.idx);
+}
+
+function onDragStart(e) {
+  if (!gameActive) return;
+  e.preventDefault();
+  isDragging = true;
+  dragMoved = false;
+  const {x, y} = getCoords(e);
+  dragStartIdx = getTileFromPoint(x, y);
+}
+
+function onDragMove(e) {
+  if (!isDragging || !gameActive) return;
+  e.preventDefault();
+  const {x, y} = getCoords(e);
+  const idx = getTileFromPoint(x, y);
+  if (idx === null) return;
+
+  // First movement — start building the drag path from the start tile
+  if (!dragMoved) {
+    if (idx === dragStartIdx) return; // hasn't moved off the start tile yet
+    dragMoved = true;
+    clearWord();
+    if (dragStartIdx !== null) selectTile(dragStartIdx);
+  }
+
+  if (!selectedCells.includes(idx)) {
+    if (selectedCells.length === 0 || isAdjacent(selectedCells[selectedCells.length - 1], idx)) {
+      selectedCells.push(idx);
+      updateTileStyles();
+      updateCurrentWord();
+    }
+  }
+}
+
+function onDragEnd(e) {
+  if (!isDragging) return;
+  isDragging = false;
+
+  if (!dragMoved) {
+    // It was a tap — toggle the tile
+    const idx = dragStartIdx;
+    if (idx === null) return;
+    if (selectedCells.length > 0 && selectedCells[selectedCells.length - 1] === idx) {
+      // Tap last tile again = deselect it
+      selectedCells.pop();
+      updateTileStyles();
+      updateCurrentWord();
+    } else {
+      selectTile(idx);
+    }
+  } else {
+    // It was a drag — auto-submit if 3+ letters
+    if (selectedCells.length >= 3) {
+      submitWord();
+    } else {
+      clearWord();
+    }
+  }
+  dragStartIdx = null;
+}
+
+function getCoords(e) {
+  if (e.touches && e.touches.length > 0) {
+    return {x: e.touches[0].clientX, y: e.touches[0].clientY};
+  }
+  if (e.changedTouches && e.changedTouches.length > 0) {
+    return {x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY};
+  }
+  return {x: e.clientX, y: e.clientY};
 }
 
 function selectTile(idx) {
   if (!gameActive) return;
-
-  // Deselect if clicking last selected
-  if (selectedCells.length > 0 && selectedCells[selectedCells.length - 1] === idx) {
-    selectedCells.pop();
-    updateTileStyles();
-    updateCurrentWord();
-    return;
-  }
-
-  // Check adjacency
-  if (selectedCells.length > 0) {
-    if (!isAdjacent(selectedCells[selectedCells.length - 1], idx)) return;
-  }
-
-  // Prevent reuse
   if (selectedCells.includes(idx)) return;
-
+  if (selectedCells.length > 0 && !isAdjacent(selectedCells[selectedCells.length - 1], idx)) return;
   selectedCells.push(idx);
   updateTileStyles();
   updateCurrentWord();
