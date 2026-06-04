@@ -42,9 +42,11 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
+    padding-top: 8vh;
     min-height: 100vh;
-    padding: 2rem;
+    padding-left: 2rem;
+    padding-right: 2rem;
     gap: 2rem;
   }
 
@@ -288,6 +290,21 @@
     letter-spacing: 1.5px;
     color: var(--text-muted);
   }
+
+  .btn-restart {
+    display: block;
+    margin: 4px auto 0;
+    background: none;
+    border: 1.5px solid var(--border);
+    border-radius: 6px;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    padding: 1px 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    line-height: 1.6;
+  }
+  .btn-restart:hover { border-color: var(--terracotta); color: var(--terracotta); }
 
   .scores-mini {
     display: flex;
@@ -540,8 +557,47 @@
     border-radius: 50%;
     animation: spin 0.7s linear infinite;
   }
-  @keyframes spin { to { transform: rotate(360deg); } }
-</style>
+  .settings-group {
+    margin-bottom: 1.25rem;
+  }
+  .settings-group label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-muted);
+    font-weight: 500;
+    display: block;
+    margin-bottom: 0.5rem;
+  }
+  .option-pills {
+    display: flex;
+    gap: 0.5rem;
+  }
+  .option-pill {
+    flex: 1;
+    padding: 0.5rem;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: var(--cream);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+  }
+  .option-pill.active {
+    border-color: var(--terracotta);
+    background: rgba(196,82,42,0.08);
+    color: var(--terracotta);
+  }
+  .settings-divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 1.25rem 0;
+  }
+
 </head>
 <body>
 
@@ -551,7 +607,6 @@
 <div id="lobby">
   <div class="logo">
     <h1>Bo<span>ggle</span></h1>
-    <p>Juego de palabras en español</p>
   </div>
 
   <div class="lobby-card">
@@ -560,6 +615,36 @@
       <label>Tu nombre</label>
       <input id="create-name" type="text" placeholder="¿Cómo te llamas?" maxlength="20">
     </div>
+
+    <hr class="settings-divider">
+
+    <div class="settings-group">
+      <label>⏱ Duración del juego</label>
+      <div class="option-pills" id="timer-pills">
+        <button class="option-pill active" data-val="180" onclick="selectPill('timer-pills', this)">3 min</button>
+        <button class="option-pill" data-val="240" onclick="selectPill('timer-pills', this)">4 min</button>
+        <button class="option-pill" data-val="300" onclick="selectPill('timer-pills', this)">5 min</button>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <label>🔤 Longitud mínima de palabra</label>
+      <div class="option-pills" id="minword-pills">
+        <button class="option-pill active" data-val="3" onclick="selectPill('minword-pills', this)">3 letras</button>
+        <button class="option-pill" data-val="4" onclick="selectPill('minword-pills', this)">4 letras</button>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <label>👁 Puntajes durante el juego</label>
+      <div class="option-pills" id="scores-pills">
+        <button class="option-pill active" data-val="all" onclick="selectPill('scores-pills', this)">Todos</button>
+        <button class="option-pill" data-val="own" onclick="selectPill('scores-pills', this)">Solo el mío</button>
+      </div>
+    </div>
+
+    <hr class="settings-divider">
+
     <button class="btn btn-primary" onclick="createRoom()">Crear sala →</button>
 
     <div class="divider">o únete a una sala existente</div>
@@ -599,6 +684,7 @@
     <div class="timer-display" id="timer">3:00</div>
     <div class="round-info">
       <div class="round-num">En juego</div>
+      <button class="btn-restart" onclick="restartGame()" title="Nueva partida">↺</button>
     </div>
     <div class="scores-mini" id="scores-mini"></div>
   </div>
@@ -874,6 +960,7 @@ const FALLBACK_WORDS = [
 // GAME STATE
 // ========================
 let db, roomRef, playerId, playerName, roomCode, isHost;
+let gameSettings = { timerLength: 180, minWordLength: 3, showAllScores: true };
 let board = [], selectedCells = [], foundWords = [], scores = {};
 let timerInterval, gameActive = false;
 
@@ -908,7 +995,12 @@ function genPlayerId() {
 async function createRoom() {
   const name = document.getElementById('create-name').value.trim();
   if (!name) { showToast('Escribe tu nombre'); return; }
-  
+
+  // Read selected settings
+  gameSettings.timerLength    = parseInt(document.querySelector('#timer-pills .option-pill.active').dataset.val);
+  gameSettings.minWordLength  = parseInt(document.querySelector('#minword-pills .option-pill.active').dataset.val);
+  gameSettings.showAllScores  = document.querySelector('#scores-pills .option-pill.active').dataset.val === 'all';
+
   playerName = name;
   playerId = genPlayerId();
   isHost = true;
@@ -920,6 +1012,7 @@ async function createRoom() {
   await roomRef.set({
     host: playerId,
     status: 'waiting',
+    settings: gameSettings,
     players: { [playerId]: { name, score: 0, words: [] } },
     board: null,
     startedAt: null
@@ -965,6 +1058,7 @@ function listenRoom() {
 
     if (data.status === 'playing' && !gameActive) {
       board = data.board;
+      if (data.settings) gameSettings = data.settings; // sync settings to all players
       scores = {};
       Object.entries(players).forEach(([id, p]) => scores[id] = { name: p.name, score: 0 });
       startGameLocal();
@@ -1021,6 +1115,29 @@ async function startGame() {
   await roomRef.update({ board: newBoard, status: 'playing', startedAt: Date.now() });
 }
 
+async function restartGame() {
+  clearInterval(timerInterval);
+  gameActive = false;
+  const newBoard = generateBoard();
+  board = newBoard;
+  if (roomRef) {
+    const snap = await roomRef.once('value');
+    const players = snap.val().players || {};
+    const resetPlayers = {};
+    Object.entries(players).forEach(([id, p]) => {
+      resetPlayers[id] = { ...p, score: 0, words: [] };
+    });
+    await roomRef.update({ board: newBoard, status: 'playing', startedAt: Date.now(), players: resetPlayers, settings: gameSettings });
+  } else {
+    startGameLocal();
+  }
+}
+
+function selectPill(groupId, el) {
+  document.querySelectorAll(`#${groupId} .option-pill`).forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+}
+
 // ========================
 // GAME LOCAL STATE
 // ========================
@@ -1028,12 +1145,16 @@ function startGameLocal() {
   gameActive = true;
   foundWords = [];
   selectedCells = [];
+  document.getElementById('found-words').innerHTML = '';
+  document.getElementById('word-feedback').textContent = '';
+  document.getElementById('current-word').textContent = '—';
 
   document.getElementById('waiting').style.display = 'none';
   document.getElementById('game').style.display = 'flex';
+  document.querySelector('.btn-restart').style.display = isHost ? 'block' : 'none';
 
   renderBoard();
-  startTimer(180); // 3 minutes
+  startTimer(gameSettings.timerLength);
 }
 
 function renderBoard() {
@@ -1181,7 +1302,7 @@ function submitWord() {
   const fb = document.getElementById('word-feedback');
 
   if (!dictReady) { fb.textContent = 'Cargando diccionario...'; fb.className = 'word-feedback err'; return; }
-  if (word.length < 3) { fb.textContent = 'Mínimo 3 letras'; fb.className = 'word-feedback err'; return; }
+  if (word.length < gameSettings.minWordLength) { fb.textContent = `Mínimo ${gameSettings.minWordLength} letras`; fb.className = 'word-feedback err'; return; }
   if (foundWords.includes(word)) { fb.textContent = 'Ya encontraste esa palabra'; fb.className = 'word-feedback err'; clearWord(); return; }
 
   if (DICT.has(word)) {
@@ -1268,11 +1389,16 @@ async function endGame() {
 function updateScoresMini(players) {
   const el = document.getElementById('scores-mini');
   el.innerHTML = '';
-  Object.entries(players).slice(0, 3).forEach(([id, p], i) => {
+  const entries = Object.entries(players);
+  const visible = gameSettings.showAllScores
+    ? entries
+    : entries.filter(([id]) => id === playerId);
+  visible.slice(0, 3).forEach(([id, p], i) => {
+    const colorIdx = entries.findIndex(([eid]) => eid === id);
     el.innerHTML += `
       <div class="score-chip">
         <div class="name">${p.name}</div>
-        <div class="pts" style="color:${COLORS[i]}">${p.score || 0}</div>
+        <div class="pts" style="color:${COLORS[colorIdx % COLORS.length]}">${p.score || 0}</div>
       </div>`;
   });
 }
