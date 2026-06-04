@@ -598,6 +598,7 @@
     margin: 1.25rem 0;
   }
 
+</style>
 </head>
 <body>
 
@@ -611,6 +612,10 @@
 
   <div class="lobby-card">
     <h2>Crear nueva sala</h2>
+    <div id="dict-status" style="display:flex; align-items:center; gap:0.5rem; font-size:0.78rem; color:var(--text-muted); margin-bottom:0.75rem;">
+      <span id="dict-dot" style="width:8px; height:8px; border-radius:50%; background:var(--border); flex-shrink:0; transition: background 0.3s;"></span>
+      <span id="dict-msg">Cargando diccionario...</span>
+    </div>
     <div class="input-group">
       <label>Tu nombre</label>
       <input id="create-name" type="text" placeholder="¿Cómo te llamas?" maxlength="20">
@@ -645,7 +650,7 @@
 
     <hr class="settings-divider">
 
-    <button class="btn btn-primary" onclick="createRoom()">Crear sala →</button>
+    <button class="btn btn-primary" id="create-room-btn" onclick="createRoom()">Crear sala →</button>
 
     <div class="divider">o únete a una sala existente</div>
 
@@ -655,7 +660,7 @@
       <label>Código de sala</label>
       <input id="join-code" type="text" placeholder="ABCD" maxlength="4" style="text-transform:uppercase; font-size:1.3rem; letter-spacing:4px; text-align:center;">
     </div>
-    <button class="btn btn-secondary" onclick="joinRoom()">Unirse a sala</button>
+    <button class="btn btn-secondary" id="join-room-btn" onclick="joinRoom()">Unirse a sala</button>
   </div>
 </div>
 
@@ -778,10 +783,26 @@ async function loadDictionary() {
     DICT = new Set(text.split('\n').map(w => w.trim().toLowerCase()).filter(w => w.length >= 3));
     dictReady = true;
     console.log(`Diccionario cargado: ${DICT.size} palabras`);
+    setDictStatus('ok', `Diccionario listo — ${DICT.size.toLocaleString()} palabras`);
   } catch (e) {
     console.warn('words.txt no encontrado, usando diccionario básico incorporado');
     DICT = new Set(FALLBACK_WORDS);
     dictReady = true;
+    setDictStatus('ok', `Diccionario listo — ${DICT.size.toLocaleString()} palabras`);
+  }
+}
+
+function setDictStatus(state, msg) {
+  const dot = document.getElementById('dict-dot');
+  const txt = document.getElementById('dict-msg');
+  if (!dot || !txt) return;
+  txt.textContent = msg;
+  if (state === 'ok') {
+    dot.style.background = 'var(--green-light)';
+    txt.style.color = 'var(--green)';
+  } else {
+    dot.style.background = '#ccc';
+    txt.style.color = 'var(--text-muted)';
   }
 }
 
@@ -1462,8 +1483,10 @@ function startDemoMode() {
   playerId = genPlayerId();
   isHost = true;
   roomCode = 'DEMO';
-  isHost = true;
   board = generateBoard();
+  gameSettings.timerLength   = parseInt(document.querySelector('#timer-pills .option-pill.active').dataset.val);
+  gameSettings.minWordLength = parseInt(document.querySelector('#minword-pills .option-pill.active').dataset.val);
+  gameSettings.showAllScores = document.querySelector('#scores-pills .option-pill.active').dataset.val === 'all';
   document.getElementById('lobby').style.display = 'none';
   startGameLocal();
   showToast('Modo demo (1 jugador)');
@@ -1496,10 +1519,16 @@ initFirebase();
 
 // Check if running without config - offer demo
 if (FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') {
-  document.querySelector('.btn-primary').textContent = 'Demo (1 jugador) →';
-  document.querySelector('.btn-primary').onclick = startDemoMode;
-  document.querySelector('.btn-secondary').onclick = () => showToast('Configura Firebase para jugar con amigos');
-  
+  const createBtn = document.getElementById('create-room-btn');
+  const joinBtn = document.getElementById('join-room-btn');
+  if (createBtn) {
+    createBtn.textContent = 'Demo (1 jugador) →';
+    createBtn.onclick = startDemoMode;
+  }
+  if (joinBtn) {
+    joinBtn.onclick = () => showToast('Configura Firebase para jugar con amigos');
+  }
+
   const note = document.createElement('p');
   note.style.cssText = 'font-size:0.78rem; color: var(--text-muted); text-align:center; max-width:380px; line-height:1.5; margin-top:-1rem;';
   note.textContent = 'Para multijugador, configura Firebase (instrucciones en el código)';
