@@ -1101,11 +1101,12 @@ function listenRoom() {
         currentGameStartedAt = data.startedAt;
         board = data.board;
         boardValidWords = data.validWords ? new Set(data.validWords) : null;
-        boardWordCount = data.validWords ? data.validWords.length : null;
+        boardWordCount = data.wordCount || null;
         if (data.settings) gameSettings = data.settings;
         scores = {};
         Object.entries(players).forEach(([id, p]) => scores[id] = { name: p.name, score: 0 });
         clearInterval(timerInterval);
+        gameActive = false; // force reset before startGameLocal sets it true
         startGameLocal();
       }
     }
@@ -1178,18 +1179,17 @@ async function startGame() {
     await roomRef.update({
       board: apiResult.board,
       validWords: apiResult.valid_words,
+      wordCount: apiResult.valid_words.length,
       status: 'playing',
       startedAt: Date.now()
     });
   } else {
-    // Fallback: local generation + generic dictionary
-    await roomRef.update({ board: generateBoardLocal(), validWords: null, status: 'playing', startedAt: Date.now() });
+    await roomRef.update({ board: generateBoardLocal(), validWords: null, wordCount: null, status: 'playing', startedAt: Date.now() });
   }
 }
 
 async function restartGame() {
   clearInterval(timerInterval);
-  gameActive = false;
   showToast('Generando tablero...');
   const apiResult = await fetchBoardFromAPI(gameSettings.minWordLength);
   if (roomRef) {
@@ -1203,6 +1203,7 @@ async function restartGame() {
     await roomRef.update({
       board: newBoard,
       validWords: apiResult ? apiResult.valid_words : null,
+      wordCount: apiResult ? apiResult.valid_words.length : null,
       status: 'playing',
       startedAt: Date.now(),
       players: resetPlayers,
@@ -1212,6 +1213,8 @@ async function restartGame() {
     // Demo mode
     board = apiResult ? apiResult.board : generateBoardLocal();
     boardValidWords = apiResult ? new Set(apiResult.valid_words) : null;
+    boardWordCount = apiResult ? apiResult.valid_words.length : null;
+    currentGameStartedAt = Date.now();
     startGameLocal();
   }
 }
