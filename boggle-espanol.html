@@ -738,6 +738,12 @@ const FIREBASE_CONFIG = {
 };
 
 // ========================
+// PYTHON API URL
+// Replace with your deployed Render/Railway URL e.g. https://boggle-api.onrender.com
+// ========================
+const API_URL = 'https://boggle-grid.onrender.com';
+
+// ========================
 // SPANISH BOGGLE LETTERS (frequency-weighted for Spanish)
 // ========================
 const DICE = [
@@ -983,6 +989,7 @@ const FALLBACK_WORDS = [
 let db, roomRef, playerId, playerName, roomCode, isHost;
 let gameSettings = { timerLength: 180, minWordLength: 3, showAllScores: true };
 let board = [], selectedCells = [], foundWords = [], scores = {};
+let boardValidWords = null; // Set of valid words for current board (from API), or null if using generic dict
 let timerInterval, gameActive = false;
 
 const COLORS = ['#C4522A','#2D6A4F','#1A5276','#7D3C98','#B7950B','#943126'];
@@ -1079,7 +1086,8 @@ function listenRoom() {
 
     if (data.status === 'playing' && !gameActive) {
       board = data.board;
-      if (data.settings) gameSettings = data.settings; // sync settings to all players
+      boardValidWords = data.validWords ? new Set(data.validWords) : null;
+      if (data.settings) gameSettings = data.settings;
       scores = {};
       Object.entries(players).forEach(([id, p]) => scores[id] = { name: p.name, score: 0 });
       startGameLocal();
@@ -1125,22 +1133,48 @@ function updateWaitingPlayers(players, hostId) {
 // ========================
 // BOARD GENERATION
 // ========================
-function generateBoard() {
+
+// Fallback local board generator (used if API is not configured)
+function generateBoardLocal() {
   const shuffled = [...DICE].sort(() => Math.random() - 0.5);
   return shuffled.map(die => die[Math.floor(Math.random() * die.length)]);
 }
 
+// Fetch board + valid words from Python API
+async function fetchBoardFromAPI(minLength) {
+  if (API_URL === 'YOUR_API_URL') return null; // not configured
+  try {
+    const res = await fetch(`${API_URL}/generate?min_length=${minLength}`, { method: 'POST' });
+    if (!res.ok) throw new Error('API error');
+    return await res.json(); // { board, valid_words, word_count }
+  } catch (e) {
+    console.warn('API unreachable, falling back to local board generation', e);
+    return null;
+  }
+}
+
 async function startGame() {
   if (!isHost) return;
-  const newBoard = generateBoard();
-  await roomRef.update({ board: newBoard, status: 'playing', startedAt: Date.now() });
+  showToast('Generando tablero...');
+  const apiResult = await fetchBoardFromAPI(gameSettings.minWordLength);
+  if (apiResult) {
+    await roomRef.update({
+      board: apiResult.board,
+      validWords: apiResult.valid_words,
+      status: 'playing',
+      startedAt: Date.now()
+    });
+  } else {
+    // Fallback: local generation + generic dictionary
+    await roomRef.update({ board: generateBoardLocal(), validWords: null, status: 'playing', startedAt: Date.now() });
+  }
 }
 
 async function restartGame() {
   clearInterval(timerInterval);
   gameActive = false;
-  const newBoard = generateBoard();
-  board = newBoard;
+  showToast('Generando tablero...');
+  const apiResult = await fetchBoardFromAPI(gameSettings.minWordLength);
   if (roomRef) {
     const snap = await roomRef.once('value');
     const players = snap.val().players || {};
@@ -1148,8 +1182,19 @@ async function restartGame() {
     Object.entries(players).forEach(([id, p]) => {
       resetPlayers[id] = { ...p, score: 0, words: [] };
     });
-    await roomRef.update({ board: newBoard, status: 'playing', startedAt: Date.now(), players: resetPlayers, settings: gameSettings });
+    const newBoard = apiResult ? apiResult.board : generateBoardLocal();
+    await roomRef.update({
+      board: newBoard,
+      validWords: apiResult ? apiResult.valid_words : null,
+      status: 'playing',
+      startedAt: Date.now(),
+      players: resetPlayers,
+      settings: gameSettings
+    });
   } else {
+    // Demo mode
+    board = apiResult ? apiResult.board : generateBoardLocal();
+    boardValidWords = apiResult ? new Set(apiResult.valid_words) : null;
     startGameLocal();
   }
 }
@@ -1326,7 +1371,11 @@ function submitWord() {
   if (word.length < gameSettings.minWordLength) { fb.textContent = `Mínimo ${gameSettings.minWordLength} letras`; fb.className = 'word-feedback err'; return; }
   if (foundWords.includes(word)) { fb.textContent = 'Ya encontraste esa palabra'; fb.className = 'word-feedback err'; clearWord(); return; }
 
-  if (DICT.has(word)) {
+  const isValid = boardValidWords
+    ? boardValidWords.has(word.toUpperCase())
+    : DICT.has(word);
+
+  if (isValid) {
     const pts = calcPoints(word);
     foundWords.push(word);
     addWordTag(word, true);
@@ -1478,16 +1527,24 @@ function backToLobby() {
 // ========================
 // DEMO MODE (no Firebase)
 // ========================
-function startDemoMode() {
+async function startDemoMode() {
   playerName = document.getElementById('create-name').value.trim() || 'Jugador';
   playerId = genPlayerId();
   isHost = true;
   roomCode = 'DEMO';
-  board = generateBoard();
   gameSettings.timerLength   = parseInt(document.querySelector('#timer-pills .option-pill.active').dataset.val);
   gameSettings.minWordLength = parseInt(document.querySelector('#minword-pills .option-pill.active').dataset.val);
   gameSettings.showAllScores = document.querySelector('#scores-pills .option-pill.active').dataset.val === 'all';
   document.getElementById('lobby').style.display = 'none';
+  showToast('Generando tablero...');
+  const apiResult = await fetchBoardFromAPI(gameSettings.minWordLength);
+  if (apiResult) {
+    board = apiResult.board;
+    boardValidWords = new Set(apiResult.valid_words);
+  } else {
+    board = generateBoardLocal();
+    boardValidWords = null;
+  }
   startGameLocal();
   showToast('Modo demo (1 jugador)');
 }
