@@ -291,6 +291,14 @@
     color: var(--text-muted);
   }
 
+  .word-count-display {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-align: center;
+    letter-spacing: 0.5px;
+    min-height: 1rem;
+  }
+
   .btn-restart {
     display: block;
     margin: 4px auto 0;
@@ -689,6 +697,7 @@
     <div class="timer-display" id="timer">3:00</div>
     <div class="round-info">
       <div class="round-num">En juego</div>
+      <div class="word-count-display" id="word-count-display"></div>
       <button class="btn-restart" onclick="restartGame()" title="Nueva partida">↺</button>
     </div>
     <div class="scores-mini" id="scores-mini"></div>
@@ -989,7 +998,9 @@ const FALLBACK_WORDS = [
 let db, roomRef, playerId, playerName, roomCode, isHost;
 let gameSettings = { timerLength: 180, minWordLength: 3, showAllScores: true };
 let board = [], selectedCells = [], foundWords = [], scores = {};
-let boardValidWords = null; // Set of valid words for current board (from API), or null if using generic dict
+let boardValidWords = null;
+let boardWordCount = null;
+let currentGameStartedAt = null;
 let timerInterval, gameActive = false;
 
 const COLORS = ['#C4522A','#2D6A4F','#1A5276','#7D3C98','#B7950B','#943126'];
@@ -1084,13 +1095,19 @@ function listenRoom() {
 
     updateWaitingPlayers(players, data.host);
 
-    if (data.status === 'playing' && !gameActive) {
-      board = data.board;
-      boardValidWords = data.validWords ? new Set(data.validWords) : null;
-      if (data.settings) gameSettings = data.settings;
-      scores = {};
-      Object.entries(players).forEach(([id, p]) => scores[id] = { name: p.name, score: 0 });
-      startGameLocal();
+    if (data.status === 'playing') {
+      const newGame = !gameActive || (data.startedAt && data.startedAt !== currentGameStartedAt);
+      if (newGame) {
+        currentGameStartedAt = data.startedAt;
+        board = data.board;
+        boardValidWords = data.validWords ? new Set(data.validWords) : null;
+        boardWordCount = data.validWords ? data.validWords.length : null;
+        if (data.settings) gameSettings = data.settings;
+        scores = {};
+        Object.entries(players).forEach(([id, p]) => scores[id] = { name: p.name, score: 0 });
+        clearInterval(timerInterval);
+        startGameLocal();
+      }
     }
 
     if (data.status === 'finished') {
@@ -1214,6 +1231,8 @@ function startGameLocal() {
   document.getElementById('found-words').innerHTML = '';
   document.getElementById('word-feedback').textContent = '';
   document.getElementById('current-word').textContent = '—';
+  document.getElementById('word-count-display').textContent =
+    boardWordCount !== null ? `${boardWordCount} palabras posibles` : '';
 
   document.getElementById('waiting').style.display = 'none';
   document.getElementById('game').style.display = 'flex';
@@ -1541,10 +1560,13 @@ async function startDemoMode() {
   if (apiResult) {
     board = apiResult.board;
     boardValidWords = new Set(apiResult.valid_words);
+    boardWordCount = apiResult.valid_words.length;
   } else {
     board = generateBoardLocal();
     boardValidWords = null;
+    boardWordCount = null;
   }
+  currentGameStartedAt = Date.now();
   startGameLocal();
   showToast('Modo demo (1 jugador)');
 }
