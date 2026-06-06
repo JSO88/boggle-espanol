@@ -727,7 +727,12 @@
   <div class="results-card">
     <div id="results-list"></div>
   </div>
-  <button class="btn btn-primary" onclick="backToLobby()" style="max-width:380px;">Jugar de nuevo</button>
+  <div style="display:flex; flex-direction:column; gap:0.75rem; width:100%; max-width:380px;">
+    <button class="btn btn-primary" id="play-again-btn" onclick="playAgain()" style="display:none;">
+      Jugar otra vez (misma sala) ↺
+    </button>
+    <button class="btn btn-secondary" onclick="backToLobby()">Salir de la sala</button>
+  </div>
 </div>
 
 <script>
@@ -1107,6 +1112,7 @@ function listenRoom() {
         Object.entries(players).forEach(([id, p]) => scores[id] = { name: p.name, score: 0 });
         clearInterval(timerInterval);
         gameActive = false; // force reset before startGameLocal sets it true
+        document.getElementById('results').style.display = 'none';
         startGameLocal();
       }
     }
@@ -1504,11 +1510,14 @@ function showResults(data) {
   clearInterval(timerInterval);
   gameActive = false;
 
+  // Show "play again" button only for the host
+  document.getElementById('play-again-btn').style.display = isHost ? 'block' : 'none';
+
   const players = data.players || {};
   const sorted = Object.entries(players).sort((a, b) => (b[1].score || 0) - (a[1].score || 0));
 
   if (sorted.length > 0) {
-    document.getElementById('results-headline').innerHTML = 
+    document.getElementById('results-headline').innerHTML =
       `¡<span class="winner-name">${sorted[0][1].name}</span> gana!`;
   }
 
@@ -1526,6 +1535,16 @@ function showResults(data) {
         <div class="result-score" style="color:${COLORS[i]}">${p.score || 0}</div>
       </div>`;
   });
+}
+
+async function playAgain() {
+  // Reuse the same room — just generate a new board and reset to playing
+  document.getElementById('play-again-btn').disabled = true;
+  document.getElementById('play-again-btn').textContent = 'Generando tablero...';
+  await restartGame();
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('play-again-btn').disabled = false;
+  document.getElementById('play-again-btn').textContent = 'Jugar otra vez (misma sala) ↺';
 }
 
 function showResultsDemo() {
