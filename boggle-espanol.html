@@ -1281,14 +1281,29 @@ function renderBoard() {
 }
 
 let isDragging = false;
-let dragMoved = false;      // true if finger/mouse moved enough to count as a drag
-let dragStartIdx = null;    // tile touched at start
+let dragMoved = false;
+let dragStartIdx = null;
+let lastRegisteredIdx = null; // track last tile cleanly entered to avoid flicker
 
+// Only register a tile if the touch point is within the inner 55% of the tile
+// This creates a dead zone at tile edges, preventing accidental diagonal picks
 function getTileFromPoint(x, y) {
   const el = document.elementFromPoint(x, y);
   if (!el) return null;
   const tile = el.closest('.tile');
   if (!tile) return null;
+
+  const rect = tile.getBoundingClientRect();
+  const deadZone = 0.22; // 22% dead zone on each side
+  const innerLeft   = rect.left   + rect.width  * deadZone;
+  const innerRight  = rect.right  - rect.width  * deadZone;
+  const innerTop    = rect.top    + rect.height * deadZone;
+  const innerBottom = rect.bottom - rect.height * deadZone;
+
+  if (x < innerLeft || x > innerRight || y < innerTop || y > innerBottom) {
+    return null; // finger is in the edge dead zone — ignore
+  }
+
   return parseInt(tile.dataset.idx);
 }
 
@@ -1297,28 +1312,47 @@ function onDragStart(e) {
   e.preventDefault();
   isDragging = true;
   dragMoved = false;
+  lastRegisteredIdx = null;
   const {x, y} = getCoords(e);
-  dragStartIdx = getTileFromPoint(x, y);
+  // For start, use the full tile area (no dead zone) so tap registration is easy
+  const el = document.elementFromPoint(x, y);
+  const tile = el && el.closest('.tile');
+  dragStartIdx = tile ? parseInt(tile.dataset.idx) : null;
 }
 
 function onDragMove(e) {
   if (!isDragging || !gameActive) return;
   e.preventDefault();
   const {x, y} = getCoords(e);
-  const idx = getTileFromPoint(x, y);
-  if (idx === null) return;
+  const idx = getTileFromPoint(x, y); // uses center-zone only
+  if (idx === null) return;           // in dead zone — skip
+  if (idx === lastRegisteredIdx) return; // already on this tile
 
-  // First movement — start building the drag path from the start tile
+  // First real move off the start tile — begin drag path
   if (!dragMoved) {
-    if (idx === dragStartIdx) return; // hasn't moved off the start tile yet
+    if (idx === dragStartIdx) return;
     dragMoved = true;
     clearWord();
-    if (dragStartIdx !== null) selectTile(dragStartIdx);
+    if (dragStartIdx !== null) {
+      selectedCells.push(dragStartIdx);
+      lastRegisteredIdx = dragStartIdx;
+      updateTileStyles();
+      updateCurrentWord();
+    }
   }
 
   if (!selectedCells.includes(idx)) {
     if (selectedCells.length === 0 || isAdjacent(selectedCells[selectedCells.length - 1], idx)) {
       selectedCells.push(idx);
+      lastRegisteredIdx = idx;
+      updateTileStyles();
+      updateCurrentWord();
+    }
+  } else {
+    // Allow backtracking — if moving back to second-to-last tile, undo last pick
+    if (selectedCells.length >= 2 && idx === selectedCells[selectedCells.length - 2]) {
+      selectedCells.pop();
+      lastRegisteredIdx = idx;
       updateTileStyles();
       updateCurrentWord();
     }
@@ -1330,11 +1364,10 @@ function onDragEnd(e) {
   isDragging = false;
 
   if (!dragMoved) {
-    // It was a tap — toggle the tile
+    // Tap — toggle tile
     const idx = dragStartIdx;
     if (idx === null) return;
     if (selectedCells.length > 0 && selectedCells[selectedCells.length - 1] === idx) {
-      // Tap last tile again = deselect it
       selectedCells.pop();
       updateTileStyles();
       updateCurrentWord();
@@ -1342,7 +1375,6 @@ function onDragEnd(e) {
       selectTile(idx);
     }
   } else {
-    // It was a drag — auto-submit if 3+ letters
     if (selectedCells.length >= 3) {
       submitWord();
     } else {
@@ -1350,6 +1382,7 @@ function onDragEnd(e) {
     }
   }
   dragStartIdx = null;
+  lastRegisteredIdx = null;
 }
 
 function getCoords(e) {
