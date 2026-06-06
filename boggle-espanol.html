@@ -731,6 +731,9 @@
     <button class="btn btn-primary" id="play-again-btn" onclick="playAgain()" style="display:none;">
       Jugar otra vez (misma sala) ↺
     </button>
+    <p id="play-again-waiting" style="display:none; text-align:center; font-size:0.85rem; color:var(--text-muted);">
+      Esperando al anfitrión para jugar de nuevo...
+    </p>
     <button class="btn btn-secondary" onclick="backToLobby()">Salir de la sala</button>
   </div>
 </div>
@@ -1001,6 +1004,9 @@ const FALLBACK_WORDS = [
 // GAME STATE
 // ========================
 let db, roomRef, playerId, playerName, roomCode, isHost;
+// Restore isHost in case of re-render
+if (sessionStorage.getItem('boggle_isHost') === 'true') isHost = true;
+if (sessionStorage.getItem('boggle_isHost') === 'false') isHost = false;
 let gameSettings = { timerLength: 180, minWordLength: 3, showAllScores: true };
 let board = [], selectedCells = [], foundWords = [], scores = {};
 let boardValidWords = null;
@@ -1048,6 +1054,7 @@ async function createRoom() {
   playerName = name;
   playerId = genPlayerId();
   isHost = true;
+  sessionStorage.setItem('boggle_isHost', 'true');
   roomCode = genCode();
 
   if (!db) { startDemoMode(); return; }
@@ -1077,6 +1084,7 @@ async function joinRoom() {
   playerName = name;
   playerId = genPlayerId();
   isHost = false;
+  sessionStorage.setItem('boggle_isHost', 'false');
   roomCode = code;
   roomRef = db.ref('rooms/' + code);
 
@@ -1510,8 +1518,16 @@ function showResults(data) {
   clearInterval(timerInterval);
   gameActive = false;
 
-  // Show "play again" button only for the host
-  document.getElementById('play-again-btn').style.display = isHost ? 'block' : 'none';
+  // Show "play again" button for host, waiting message for others
+  const playAgainBtn = document.getElementById('play-again-btn');
+  const waitingMsg = document.getElementById('play-again-waiting');
+  if (isHost) {
+    playAgainBtn.style.display = 'block';
+    waitingMsg.style.display = 'none';
+  } else {
+    playAgainBtn.style.display = 'none';
+    waitingMsg.style.display = 'block';
+  }
 
   const players = data.players || {};
   const sorted = Object.entries(players).sort((a, b) => (b[1].score || 0) - (a[1].score || 0));
