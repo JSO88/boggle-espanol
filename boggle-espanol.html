@@ -528,7 +528,7 @@
 
   .toast {
     position: fixed;
-    top: 1rem;
+    top: 4rem;
     left: 50%;
     transform: translateX(-50%);
     background: var(--dark);
@@ -656,6 +656,14 @@
       </div>
     </div>
 
+    <div class="settings-group">
+      <label>⊞ Tamaño del tablero</label>
+      <div class="option-pills" id="gridsize-pills">
+        <button class="option-pill active" data-val="4" onclick="selectPill('gridsize-pills', this)">4 × 4</button>
+        <button class="option-pill" data-val="5" onclick="selectPill('gridsize-pills', this)">5 × 5</button>
+      </div>
+    </div>
+
     <hr class="settings-divider">
 
     <button class="btn btn-primary" id="create-room-btn" onclick="createRoom()">Crear sala →</button>
@@ -704,7 +712,13 @@
   </div>
 
   <div class="board-wrap">
-    <div class="board" id="board"></div>
+    <div style="position:relative; width:100%; max-width:360px;">
+      <div class="board" id="board"></div>
+      <div id="countdown-overlay" style="display:none; position:absolute; inset:0; background:var(--surface2); border-radius:18px; align-items:center; justify-content:center; flex-direction:column; gap:0.5rem; z-index:10;">
+        <div id="countdown-num" style="font-family:'Playfair Display',serif; font-size:5rem; font-weight:900; color:var(--terracotta); line-height:1;"></div>
+        <div style="font-size:0.8rem; text-transform:uppercase; letter-spacing:2px; color:var(--text-muted);">Preparate...</div>
+      </div>
+    </div>
   </div>
 
   <div class="word-area">
@@ -788,6 +802,13 @@ const LETTER_POINTS = {
   B:3, C:3, M:3, P:3,
   F:4, H:4, V:4, Y:4,
   CH:5, LL:5, J:6, X:8, K:10, Q:10, Z:10
+};
+
+const LETTER_FREQ = {
+  A:13.27, E:11.12, O:8.69, R:8.66, I:7.67, S:7.11, N:6.70, T:5.28,
+  C:4.76, L:4.35, D:4.29, M:3.25, U:2.87, P:2.54, B:1.70, G:1.67,
+  V:1.27, H:1.11, F:0.98, J:0.55, Y:0.50, Z:0.47, K:0.35, Q:0.28,
+  X:0.22, W:0.20, Ñ:0.14
 };
 
 // ========================
@@ -1007,7 +1028,7 @@ let db, roomRef, playerId, playerName, roomCode, isHost;
 // Restore isHost in case of re-render
 if (sessionStorage.getItem('boggle_isHost') === 'true') isHost = true;
 if (sessionStorage.getItem('boggle_isHost') === 'false') isHost = false;
-let gameSettings = { timerLength: 180, minWordLength: 3, showAllScores: true };
+let gameSettings = { timerLength: 180, minWordLength: 3, showAllScores: true, gridSize: 4 };
 let board = [], selectedCells = [], foundWords = [], scores = {};
 let boardValidWords = null;
 let boardWordCount = null;
@@ -1050,6 +1071,7 @@ async function createRoom() {
   gameSettings.timerLength    = parseInt(document.querySelector('#timer-pills .option-pill.active').dataset.val);
   gameSettings.minWordLength  = parseInt(document.querySelector('#minword-pills .option-pill.active').dataset.val);
   gameSettings.showAllScores  = document.querySelector('#scores-pills .option-pill.active').dataset.val === 'all';
+  gameSettings.gridSize       = parseInt(document.querySelector('#gridsize-pills .option-pill.active').dataset.val);
 
   playerName = name;
   playerId = genPlayerId();
@@ -1168,17 +1190,35 @@ function updateWaitingPlayers(players, hostId) {
 
 // Fallback local board generator (used if API is not configured)
 function generateBoardLocal() {
-  const shuffled = [...DICE].sort(() => Math.random() - 0.5);
-  return shuffled.map(die => die[Math.floor(Math.random() * die.length)]);
+  const size = gameSettings.gridSize || 4;
+  const total = size * size;
+  const letters = Object.keys(LETTER_FREQ || {});
+  const weights = Object.values(LETTER_FREQ || {});
+  // Use DICE for 4x4, weighted random for 5x5
+  if (size === 4) {
+    const shuffled = [...DICE].sort(() => Math.random() - 0.5);
+    return shuffled.map(die => die[Math.floor(Math.random() * die.length)]);
+  } else {
+    const pool = [];
+    for (let i = 0; i < 1000; i++) {
+      let r = Math.random() * weights.reduce((a, b) => a + b, 0);
+      for (let j = 0; j < letters.length; j++) {
+        r -= weights[j];
+        if (r <= 0) { pool.push(letters[j]); break; }
+      }
+    }
+    return pool.slice(0, total);
+  }
 }
 
 // Fetch board + valid words from Python API
 async function fetchBoardFromAPI(minLength) {
-  if (API_URL === 'YOUR_API_URL') return null; // not configured
+  if (API_URL === 'YOUR_API_URL') return null;
   try {
-    const res = await fetch(`${API_URL}/generate?min_length=${minLength}`, { method: 'POST' });
+    const size = gameSettings.gridSize || 4;
+    const res = await fetch(`${API_URL}/generate?min_length=${minLength}&grid_size=${size}`, { method: 'POST' });
     if (!res.ok) throw new Error('API error');
-    return await res.json(); // { board, valid_words, word_count }
+    return await res.json();
   } catch (e) {
     console.warn('API unreachable, falling back to local board generation', e);
     return null;
@@ -1242,7 +1282,6 @@ function selectPill(groupId, el) {
 // GAME LOCAL STATE
 // ========================
 function startGameLocal() {
-  gameActive = true;
   foundWords = [];
   selectedCells = [];
   document.getElementById('found-words').innerHTML = '';
@@ -1256,12 +1295,45 @@ function startGameLocal() {
   document.querySelector('.btn-restart').style.display = isHost ? 'block' : 'none';
 
   renderBoard();
-  startTimer(gameSettings.timerLength);
+  startCountdown(3, () => {
+    gameActive = true;
+    startTimer(gameSettings.timerLength);
+  });
+}
+
+function startCountdown(seconds, onDone) {
+  gameActive = false;
+  const overlay = document.getElementById('countdown-overlay');
+  const num = document.getElementById('countdown-num');
+  overlay.style.display = 'flex';
+  let remaining = seconds;
+
+  function tick() {
+    num.textContent = remaining;
+    // pop animation
+    num.style.transform = 'scale(1.3)';
+    num.style.transition = 'none';
+    setTimeout(() => {
+      num.style.transform = 'scale(1)';
+      num.style.transition = 'transform 0.8s ease';
+    }, 50);
+
+    if (remaining <= 0) {
+      overlay.style.display = 'none';
+      onDone();
+      return;
+    }
+    remaining--;
+    setTimeout(tick, 1000);
+  }
+  tick();
 }
 
 function renderBoard() {
+  const size = gameSettings.gridSize || 4;
   const boardEl = document.getElementById('board');
   boardEl.innerHTML = '';
+  boardEl.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
   board.forEach((letter, i) => {
     const tile = document.createElement('div');
     tile.className = 'tile';
@@ -1405,8 +1477,9 @@ function selectTile(idx) {
 }
 
 function isAdjacent(a, b) {
-  const ar = Math.floor(a / 4), ac = a % 4;
-  const br = Math.floor(b / 4), bc = b % 4;
+  const size = gameSettings.gridSize || 4;
+  const ar = Math.floor(a / size), ac = a % size;
+  const br = Math.floor(b / size), bc = b % size;
   return Math.abs(ar - br) <= 1 && Math.abs(ac - bc) <= 1;
 }
 
@@ -1625,6 +1698,7 @@ async function startDemoMode() {
   gameSettings.timerLength   = parseInt(document.querySelector('#timer-pills .option-pill.active').dataset.val);
   gameSettings.minWordLength = parseInt(document.querySelector('#minword-pills .option-pill.active').dataset.val);
   gameSettings.showAllScores = document.querySelector('#scores-pills .option-pill.active').dataset.val === 'all';
+  gameSettings.gridSize      = parseInt(document.querySelector('#gridsize-pills .option-pill.active').dataset.val);
   document.getElementById('lobby').style.display = 'none';
   showToast('Generando tablero...');
   const apiResult = await fetchBoardFromAPI(gameSettings.minWordLength);
