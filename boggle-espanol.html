@@ -367,6 +367,9 @@
     transition: all 0.15s;
     position: relative;
     aspect-ratio: 1;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .tile .letter {
@@ -379,6 +382,10 @@
 
   .tile .points {
     display: none;
+  }
+
+  .board-5x5 .tile .letter {
+    font-size: clamp(1.2rem, 4.5vw, 1.8rem);
   }
 
   .tile.selected {
@@ -612,7 +619,6 @@
 
 <div id="toast" class="toast"></div>
 
-<!-- LOBBY -->
 <div id="lobby">
   <div class="logo">
     <h1>Bo<span>ggle</span></h1>
@@ -680,7 +686,6 @@
   </div>
 </div>
 
-<!-- WAITING ROOM -->
 <div id="waiting">
   <div class="room-code-display">
     <p>Código de sala</p>
@@ -699,7 +704,6 @@
   <p id="waiting-msg" style="color: var(--text-muted); font-size:0.9rem;">Esperando al anfitrión para comenzar...</p>
 </div>
 
-<!-- GAME -->
 <div id="game">
   <div class="game-header">
     <div class="timer-display" id="timer">3:00</div>
@@ -732,7 +736,6 @@
   </div>
 </div>
 
-<!-- RESULTS -->
 <div id="results">
   <div class="results-title">
     <p style="font-size:0.8rem; text-transform:uppercase; letter-spacing:2px; color: var(--text-muted);">Fin del juego</p>
@@ -1333,7 +1336,18 @@ function renderBoard() {
   const size = gameSettings.gridSize || 4;
   const boardEl = document.getElementById('board');
   boardEl.innerHTML = '';
+  
+  // NEW: Explicitly set BOTH columns and rows to force perfect squares
   boardEl.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+  boardEl.style.gridTemplateRows = `repeat(${size}, 1fr)`;
+
+  // NEW: Apply specific class for 5x5 styling
+  if (size === 5) {
+    boardEl.classList.add('board-5x5');
+  } else {
+    boardEl.classList.remove('board-5x5');
+  }
+
   board.forEach((letter, i) => {
     const tile = document.createElement('div');
     tile.className = 'tile';
