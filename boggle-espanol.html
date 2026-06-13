@@ -1148,14 +1148,16 @@ function listenRoom() {
         document.getElementById('results').style.display = 'none';
         startGameLocal();
       }
+      
+      // FIX: Update scores immediately as long as status is 'playing', 
+      // ignoring whether the countdown is finished yet.
+      if (data.players) {
+        updateScoresMini(data.players);
+      }
     }
 
     if (data.status === 'finished') {
       showResults(data);
-    }
-
-    if (gameActive && data.players) {
-      updateScoresMini(data.players);
     }
   });
 }
@@ -1267,11 +1269,15 @@ async function restartGame() {
       settings: gameSettings
     });
   } else {
-    // Demo mode
+    // FIX: Ensure demo mode resets local scores and UI properly
     board = apiResult ? apiResult.board : generateBoardLocal();
     boardValidWords = apiResult ? new Set(apiResult.valid_words) : null;
     boardWordCount = apiResult ? apiResult.valid_words.length : null;
     currentGameStartedAt = Date.now();
+    
+    scores = { [playerId]: { name: playerName, score: 0 } };
+    updateScoresMini(scores);
+    
     startGameLocal();
   }
 }
@@ -1538,6 +1544,12 @@ function submitWord() {
     fb.textContent = `✓ +${pts} puntos`;
     fb.className = 'word-feedback ok';
     saveWordToFirebase(word, pts);
+    
+    // FIX: Update UI score instantly in Demo mode
+    if (!roomRef) {
+      scores[playerId].score += pts;
+      updateScoresMini(scores);
+    }
   } else {
     addWordTag(word, false);
     fb.textContent = '✗ Palabra no válida';
